@@ -79,3 +79,8 @@ test('rejects a section larger than the configured record budget', () => {
 test('represents empty content as one empty string, never zero strings', () => {
   assert.deepEqual(chunkUtf8(''), ['']);
 });
+
+test('carries colour as markers so a one-line reader can print it', () => {
+  const value = toDnsValue('# Title\n\nplain line');
+  assert.equal(value, '\\033[1;36mTitle\\033[0m\\n\\nplain line');
+});

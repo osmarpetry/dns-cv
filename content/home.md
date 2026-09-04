@@ -9,9 +9,11 @@ FastAPI, PostgreSQL, Supabase, Pinecone, RAG, AWS.
 
 # Keep reading
 
-$ dig +short TXT experience.cv.{{domain}}
-$ dig +short TXT projects.cv.{{domain}}
-$ dig +short TXT contact.cv.{{domain}}
+Run the same command again, swapping the name for one of these:
 
-Readable output: github.com/osmarpetry/dns-cv
+- experience.cv.{{domain}}
+- projects.cv.{{domain}}
+- contact.cv.{{domain}}
+
+Source and a reader script: github.com/osmarpetry/dns-cv
 Web version: {{domain}}

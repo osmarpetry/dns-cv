@@ -1,13 +1,4 @@
-const ESC = String.fromCharCode(27);
-const RESET = `${ESC}[0m`;
-
-/** The only escape sequences this project ever emits: SGR colour and style. */
-const STYLES = {
-  heading: `${ESC}[1;36m`,
-  bullet: `${ESC}[33m`,
-  label: `${ESC}[1m`,
-  command: `${ESC}[32m`,
-} as const;
+import { expandMarkers } from './sgr.ts';
 
 export interface RenderOptions {
   readonly color: boolean;
@@ -16,27 +7,20 @@ export interface RenderOptions {
 /**
  * Renders the strings of a TXT record for a terminal.
  *
- * The record itself is plain ASCII, so colour is decided here, from the shape of
- * each line. Any control byte in the response is dropped rather than forwarded:
- * DNS answers are untrusted input and must never drive the terminal.
+ * Colour was decided at build time and arrives as `\033[...m` markers, which
+ * are expanded here or dropped for plain output. Any real control byte in the
+ * answer is removed rather than forwarded: DNS answers are untrusted input and
+ * must never drive the terminal.
  */
 export function renderSection(strings: readonly string[], options: RenderOptions): string {
-  const lines = strings.join('').replaceAll('\\n', '\n').split('\n').map(stripControl);
+  const text = strings.join('').replaceAll('\\n', '\n');
 
-  return lines.map((line) => (options.color ? colorize(line) : line)).join('\n');
+  return text
+    .split('\n')
+    .map((line) => expandMarkers(stripControl(line), options))
+    .join('\n');
 }
 
 function stripControl(line: string): string {
   return line.replace(/[\u0000-\u001f\u007f]/g, '');
-}
-
-function colorize(line: string): string {
-  if (line.startsWith('# ')) return `${STYLES.heading}${line.slice(2)}${RESET}`;
-  if (line.startsWith('$ ')) return `${STYLES.command}${line}${RESET}`;
-  if (line.startsWith('- ')) return `${STYLES.bullet}-${RESET} ${line.slice(2)}`;
-
-  const label = /^([A-Za-z][\w .+-]*):(\s.*)$/.exec(line);
-  if (label) return `${STYLES.label}${label[1]}:${RESET}${label[2]}`;
-
-  return line;
 }

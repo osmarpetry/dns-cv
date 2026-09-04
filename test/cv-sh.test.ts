@@ -44,11 +44,42 @@ test('never emits escape sequences from the DNS answer', () => {
   assert.equal(output, '[2Jwiped\nplain text\n');
 });
 
-test('colours headings when asked, and always resets', () => {
+test('expands the colour markers the record carries', () => {
+  const output = run('"\\033[1;36mOsmar Petry\\033[0m"', ['--color']);
+
+  assert.equal(output, `${ESC}[1;36mOsmar Petry${ESC}[0m\n`);
+});
+
+test('expands markers a resolver printed with doubled backslashes', () => {
+  const output = run('"\\\\033[33m-\\\\033[0m item"', ['--color']);
+
+  assert.equal(output, `${ESC}[33m-${ESC}[0m item\n`);
+});
+
+test('drops the markers instead of colouring when plain output is asked for', () => {
+  const output = run('"\\033[1;36mOsmar Petry\\033[0m"', ['--plain']);
+
+  assert.equal(output, 'Osmar Petry\n');
+});
+
+test('adds no colour of its own to a record that carries no markers', () => {
   const output = run('"# Osmar Petry"', ['--color']);
 
-  assert.ok(output.startsWith(`${ESC}[1;36m`));
-  assert.ok(output.includes(`${ESC}[0m`));
+  assert.equal(output, '# Osmar Petry\n');
+});
+
+test('refuses a hyperlink sequence even when the record carries one', () => {
+  const output = run('"\\033]8;;http://evil\\aclick me"', ['--color']);
+
+  assert.ok(!output.includes(ESC), 'no escape byte may reach the terminal');
+  assert.ok(output.includes('click me'));
+});
+
+test('refuses cursor movement dressed as a colour marker', () => {
+  const output = run('"\\033[2Jwiped"', ['--color']);
+
+  assert.ok(!output.includes(ESC));
+  assert.ok(output.includes('wiped'));
 });
 
 test('fails with a clear message when the name has no TXT record', () => {

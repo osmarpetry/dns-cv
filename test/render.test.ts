@@ -18,12 +18,11 @@ test('emits no escape sequences without colour', () => {
   assert.equal(output, '# Osmar Petry\n- built things\nEmail: a@b.c');
 });
 
-test('highlights a heading with colour and always resets', () => {
+test('adds no colour of its own: an unmarked record renders plain even with colour on', () => {
   const output = renderSection(['# Osmar Petry'], { color: true });
 
-  assert.ok(output.startsWith(ESC + '[1;36m'));
-  assert.ok(output.endsWith(ESC + '[0m'));
-  assert.ok(output.includes('Osmar Petry'));
+  assert.equal(output, '# Osmar Petry');
+  assert.ok(!output.includes(ESC));
 });
 
 test('drops control bytes that arrive from DNS instead of rendering them', () => {
@@ -31,4 +30,16 @@ test('drops control bytes that arrive from DNS instead of rendering them', () =>
 
   assert.ok(!output.includes(ESC));
   assert.ok(output.includes('hello'));
+});
+
+test('expands the colour markers that arrive from DNS', () => {
+  const esc = String.fromCharCode(27);
+  assert.equal(
+    renderSection(['\\033[1;36mTitle\\033[0m\\nplain'], { color: true }),
+    `${esc}[1;36mTitle${esc}[0m\nplain`,
+  );
+});
+
+test('drops the colour markers when colour is off', () => {
+  assert.equal(renderSection(['\\033[1;36mTitle\\033[0m\\nplain'], { color: false }), 'Title\nplain');
 });

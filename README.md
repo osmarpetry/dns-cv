@@ -1,14 +1,18 @@
 # dns-cv
 
-An interactive CV published as DNS TXT records.
+An interactive CV published as DNS TXT records. Paste this into a terminal:
 
 ```bash
-dig +short TXT cv.osmarpetry.dev
+printf '%b\n' "$(dig +short TXT cv.osmarpetry.dev | sed -e 's/" "//g' -e 's/^"//' -e 's/"$//' -e 's/\\\\/\\/g')"
 ```
 
+It prints the CV in colour and tells you which command to run next. No `eval`,
+no pipe into a shell, nothing to install — the DNS answer is data for `printf`,
+never a command.
+
 Markdown in `content/` is compiled into DNS-safe TXT records, validated, and
-published to Cloudflare. `bin/cv.sh` reads a record back and prints it with
-colour — without ever executing what came off the network.
+published to Cloudflare. Colour is decided at build time and travels as text, so
+no escape byte ever arrives from the network.
 
 ## Requirements
 
@@ -57,16 +61,30 @@ builds for any domain.
 A TXT record is a list of character-strings, each capped at 255 bytes
 ([RFC 1035 §3.3.14](https://www.rfc-editor.org/rfc/rfc1035.txt)); readers treat
 the strings as one concatenated value. `src/txt.ts` chunks on character
-boundaries so a multi-byte character is never cut in half, and line breaks are
-stored as the two literal characters `\` + `n`.
+boundaries so a multi-byte character is never cut in half.
 
-Content is validated at build time as plain ASCII with no quotes, no
-backslashes and no control bytes. That is what keeps the reader trivial: there
-is no escaping to undo, and **no escape sequence can arrive from DNS at all**.
+Content in `content/*.md` is validated at build time as plain ASCII with no
+quotes, no backslashes and no control bytes. Only then does the build add two
+kinds of marker, as ordinary text:
+
+| In the record | Means |
+| --- | --- |
+| `\n` | a line break |
+| `\033[1;36m` … `\033[0m` | a colour, chosen from the shape of the line |
+
+**A real escape byte is never published.** `src/sgr.ts` decides colour at build
+time from each line's shape — `# ` is a heading, `$ ` a command, `- ` a bullet,
+`Label:` a label — and `assertOnlyColorMarkers` then proves that SGR colour and
+`\n` are the only backslash sequences in the value. A sequence that could do
+anything else — an OSC 8 hyperlink, a cursor move, a screen wipe — fails the
+build and is never sent.
+
+That is the whole security argument. Colour is worth having; the ability to
+drive someone's terminal from a DNS record is not.
 
 ## Reading a record
 
-macOS and Linux:
+Raw, on macOS and Linux:
 
 ```bash
 dig +short TXT cv.osmarpetry.dev
@@ -78,7 +96,25 @@ Windows PowerShell:
 Resolve-DnsName -Type TXT cv.osmarpetry.dev | Select-Object -ExpandProperty Strings
 ```
 
-Either way you get the raw 255-byte strings. For the readable version:
+Either way you get the 255-byte strings with the markers still literal. For the
+readable version there are two options.
+
+### One line, nothing to install
+
+```bash
+printf '%b\n' "$(dig +short TXT cv.osmarpetry.dev | sed -e 's/" "//g' -e 's/^"//' -e 's/"$//' -e 's/\\\\/\\/g')"
+```
+
+The `sed` joins the strings and undoes the doubling that DNS presentation format
+adds; `printf '%b'` expands the markers. Note what is *not* there: no `eval`, no
+`sh -c`, no pipe into a shell. The DNS answer is data for `printf`, never a
+command.
+
+`printf '%b'` will expand any backslash escape it is given, so this one-liner
+trusts that the record is the one this repo published — which the build
+guarantees. If you do not want to extend that trust, use the script.
+
+### The script, safe even against a hijacked record
 
 ```bash
 ./bin/cv.sh cv.osmarpetry.dev
@@ -87,10 +123,11 @@ DIG=kdig ./bin/cv.sh contact.cv.osmarpetry.dev
 ```
 
 `bin/cv.sh` never uses `eval`, `source` or `sh -c`. It strips every control byte
-from the answer and then applies its own colours based on line shape, so a
-poisoned or hijacked record can print wrong text but cannot drive your terminal
-or run anything. `--plain` and `NO_COLOR=1` turn colour off; it is off
-automatically when stdout is not a terminal.
+from the answer, then turns back into an escape *only* the exact shape
+`\033[<digits and semicolons>m`. Anything else stays harmless text, so a
+poisoned record can print the wrong colours and nothing more. `--plain` and
+`NO_COLOR=1` turn colour off; it is off automatically when stdout is not a
+terminal.
 
 Do not pipe a URL into a shell to install this. Read the script first — that is
 the whole point of the design.
@@ -168,7 +205,7 @@ broken: caches hold the old answer until the previous TTL expires. That is why
 Osmar Petry - Senior Product Engineer
 osmarpetry.dev
 
-  dig +short TXT cv.osmarpetry.dev
+  printf '%b\n' "$(dig +short TXT cv.osmarpetry.dev | sed -e 's/" "//g' -e 's/^"//' -e 's/"$//' -e 's/\\\\/\\/g')"
 ```
 
 Add a QR code to the normal web CV. Most recruiters do not have a terminal, do

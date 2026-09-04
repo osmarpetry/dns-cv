@@ -65,29 +65,23 @@ if [ "$color" = auto ]; then
   if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ]; then color=always; else color=never; fi
 fi
 
-# 1. join the quoted 255-byte strings, 2. drop every control byte,
-# 3. turn the literal \n markers into real line breaks.
+esc=$(printf '\033')
+
+# Colour is decided when the CV is published and travels as the literal
+# characters \033[...m. Only that exact shape is turned back into an escape:
+# a hyperlink, a cursor move or a screen wipe stays harmless text.
+if [ "$color" = always ]; then
+  markers="s/\\\\033\[\([0-9;]*\)m/${esc}[\1m/g"
+else
+  markers="s/\\\\033\[[0-9;]*m//g"
+fi
+
+# 1. join the quoted 255-byte strings, 2. drop every control byte that arrived
+# from the network, 3. undo the doubling DNS presentation format adds,
+# 4. expand the colour markers, 5. turn the \n markers into real line breaks.
 printf '%s\n' "$answer" |
   sed -e 's/^"//' -e 's/"$//' -e 's/" "//g' |
   tr -d '\000-\037\177' |
-  awk '{ gsub(/\\\\n/, "\n"); gsub(/\\n/, "\n"); print }' |
-  awk -v color="$color" '
-    BEGIN {
-      esc = sprintf("%c", 27)
-      reset = esc "[0m"
-      heading = esc "[1;36m"
-      bullet = esc "[33m"
-      label = esc "[1m"
-      command = esc "[32m"
-    }
-    color != "always" { print; next }
-    /^# / { print heading substr($0, 3) reset; next }
-    /^\$ / { print command $0 reset; next }
-    /^- / { print bullet "-" reset " " substr($0, 3); next }
-    /^[A-Za-z][A-Za-z0-9 .+_-]*: / {
-      colon = index($0, ":")
-      print label substr($0, 1, colon) reset substr($0, colon + 1)
-      next
-    }
-    { print }
-  '
+  sed -e 's/\\\\/\\/g' |
+  sed -e "$markers" |
+  awk '{ gsub(/\\n/, "\n"); print }'

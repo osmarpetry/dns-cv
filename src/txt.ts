@@ -1,3 +1,5 @@
+import { assertOnlyColorMarkers, markupLine } from './sgr.ts';
+
 /** A single DNS TXT character-string may hold at most 255 bytes (RFC 1035 §3.3.14). */
 export const MAX_STRING_BYTES = 255;
 
@@ -29,11 +31,12 @@ export function chunkUtf8(value: string, maxBytes: number = MAX_STRING_BYTES): s
 /**
  * Turns section text into a single DNS TXT value.
  *
- * Line breaks become the two literal characters `\` + `n`, and anything that
- * would need escaping in DNS presentation format (quotes, backslashes) or that
- * renders differently across resolvers (non-ASCII, control bytes) is rejected
- * at build time. That keeps the client-side parser trivial: no escape handling,
- * and no ANSI sequence can ever arrive from the network.
+ * The source is checked first as plain ASCII with no quotes, no backslashes and
+ * no control bytes. Colour is then added as markers — the literal characters
+ * `\033[...m`, never a real escape byte — and line breaks become `\` + `n`.
+ * `assertOnlyColorMarkers` proves that those two are the only backslash
+ * sequences that get published, which is what makes a one-line
+ * `printf '%b'` reader safe.
  */
 export function toDnsValue(text: string): string {
   const lines = text
@@ -44,10 +47,12 @@ export function toDnsValue(text: string): string {
   while (lines.length > 0 && lines.at(-1) === '') lines.pop();
   while (lines.length > 0 && lines[0] === '') lines.shift();
 
-  const value = lines.join('\n');
-  assertDnsSafe(value);
+  assertDnsSafe(lines.join('\n'));
 
-  return value.replaceAll('\n', '\\n');
+  const value = lines.map(markupLine).join('\\n');
+  assertOnlyColorMarkers(value);
+
+  return value;
 }
 
 const UNSAFE_CHARACTERS: ReadonlyArray<readonly [RegExp, string]> = [

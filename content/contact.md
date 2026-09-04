@@ -10,4 +10,4 @@ Work status: Luxembourgish citizen, EU work authorization
 Open to: senior and staff product engineering roles in the EU,
 hybrid in Luxembourg or remote.
 
-$ dig +short TXT cv.{{domain}}
+Back to the start: cv.{{domain}}
