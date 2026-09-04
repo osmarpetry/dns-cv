@@ -9,12 +9,17 @@ export interface CloudflareOptions {
 }
 
 /**
- * Cloudflare stores a multi-string TXT record as quoted segments in `content`.
- * Section content is validated ASCII without quotes or backslashes, so no
- * escaping is needed here.
+ * Cloudflare stores a multi-string TXT record as quoted segments in `content`,
+ * read as DNS presentation format.
+ *
+ * There, `\n` means the literal character `n` — the backslash is consumed. The
+ * only backslashes in a section are the ones `toDnsValue` added for line breaks,
+ * so they are doubled here; a resolver then hands back `\` + `n`, which the
+ * renderer turns into a newline. Quotes never reach this point: `assertDnsSafe`
+ * rejects them at build time.
  */
 export function toRecordContent(strings: readonly string[]): string {
-  return strings.map((value) => `"${value}"`).join(' ');
+  return strings.map((value) => `"${value.replaceAll('\\', '\\\\')}"`).join(' ');
 }
 
 /** Creates the TXT record for `host`, or updates it when it already exists. */
