@@ -1,0 +1,22 @@
+{
+  "name": "dns-cv",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Interactive CV published as DNS TXT records",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build:txt": "node src/cli.ts build",
+    "validate": "node src/cli.ts validate",
+    "preview": "node src/cli.ts preview",
+    "publish": "node src/cli.ts publish",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
