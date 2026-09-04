@@ -55,8 +55,21 @@ async function findRecordId(
   return found.result[0]?.id;
 }
 
-async function request<T = unknown>(
+function request<T = unknown>(
   options: CloudflareOptions,
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  return callApi<T>(options.token, method, path, body);
+}
+
+/**
+ * The single place that reaches the Cloudflare API, so the rule that an error
+ * never carries the request headers is written down once.
+ */
+export async function callApi<T = unknown>(
+  token: string,
   method: string,
   path: string,
   body?: unknown,
@@ -64,7 +77,7 @@ async function request<T = unknown>(
   const response = await fetch(`${API}${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${options.token}`,
+      authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
     body: body === undefined ? undefined : JSON.stringify(body),

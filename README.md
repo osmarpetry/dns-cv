@@ -28,9 +28,12 @@ npm test
 | `npm run validate` | Encodes every section and reports its size against the record budget |
 | `npm run preview -- --section home` | Renders a section in the terminal, exactly as a reader will see it |
 | `npm run preview -- --plain` | Same, without colour |
+| `npm run setup` | Resolves the zone id from your API token and writes `CLOUDFLARE_ZONE_ID` into `.env` |
 | `npm run publish -- --dry-run` | Shows what would be sent to Cloudflare; makes no network call |
 | `npm run publish` | Creates or updates the TXT records |
-| `npm test` | Unit tests for chunking, encoding, rendering and `bin/cv.sh` |
+| `npm run verify` | Reads the records back from `1.1.1.1` and fails if they are not what was built |
+| `npm run ship` | setup, validate, publish and verify in one run — the only command you normally need |
+| `npm test` | Unit tests for setup, preflight, verification, chunking, encoding, rendering and `bin/cv.sh` |
 
 Configuration comes from the environment (see `.env.example`):
 `DNS_CV_DOMAIN`, `DNS_CV_TTL`, `DNS_CV_MAX_BYTES`.
@@ -94,33 +97,70 @@ the whole point of the design.
 
 ## Publishing to Cloudflare
 
+Creating the API token is the only manual step. Everything after it is one command.
+
 ```bash
 cp .env.example .env      # already in .gitignore
-npm run validate
-npm run publish -- --dry-run
-npm run publish
 ```
 
-Create the API token at **My Profile → API Tokens → Create Token → Custom
-token** with the minimum it needs:
+Create the token at **My Profile → API Tokens → Create Token → Custom token**, with
+the minimum it needs:
 
 - Permissions: **Zone → DNS → Edit**
 - Zone Resources: **Include → Specific zone → your zone only**
 
-`CLOUDFLARE_ZONE_ID` is on the zone's Overview page. The token is read from the
-environment, is never logged, and is never included in error messages.
+Paste it into `CLOUDFLARE_API_TOKEN` in `.env` and leave `CLOUDFLARE_ZONE_ID` empty:
+
+```bash
+npm run ship
+```
+
+`ship` resolves the zone id from the token and writes it to `.env`, validates every
+section, publishes, and then reads the records back from `1.1.1.1` until they match —
+so a green run means the CV is actually live, not merely that the API accepted it.
+
+The token is read from the environment, is never logged, and is never included in
+error messages.
+
+### When something is missing
+
+Nothing reaches the network until the setup is complete. `ship` and `publish` both
+stop first and list every pending step at once:
+
+```
+Setup is incomplete:
+  - Set CLOUDFLARE_API_TOKEN in .env. Create the token at My Profile > API Tokens > ...
+  - Set CLOUDFLARE_ZONE_ID in .env by running `npm run setup`, which reads it from the API.
+```
+
+If `npm run setup` reports that no zone is visible to the token, the token was scoped
+to the wrong zone or to the account rather than the zone — recreate it with the two
+settings above. It never writes a guess into `.env`.
+
+You do not need the zone id by hand. If you want to see it anyway, it is on the
+domain's **Overview** page, in the **API** section at the bottom.
 
 ## Verifying after publishing
 
 ```bash
-npm run publish
+npm run verify
+```
+
+It compares the live records against the built ones on `1.1.1.1`, joining the
+255-byte strings before comparing, and ignoring unrelated TXT records on the same
+host. It exits non-zero on any difference and says which host and why.
+
+The same by hand:
+
+```bash
 dig +short TXT cv.osmarpetry.dev
 dig @1.1.1.1 +short TXT cv.osmarpetry.dev
 ./bin/cv.sh cv.osmarpetry.dev
 ```
 
 Query a second resolver, or a different network, before assuming something is
-broken: caches hold the old answer until the previous TTL expires.
+broken: caches hold the old answer until the previous TTL expires. That is why
+`ship` retries for a while instead of failing on the first look.
 
 ## Business card
 

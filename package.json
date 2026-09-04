@@ -11,7 +11,10 @@
     "build:txt": "node src/cli.ts build",
     "validate": "node src/cli.ts validate",
     "preview": "node src/cli.ts preview",
+    "setup": "node src/cli.ts setup",
     "publish": "node src/cli.ts publish",
+    "verify": "node src/cli.ts verify",
+    "ship": "node src/cli.ts ship",
     "test": "node --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },

@@ -1,12 +1,15 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { publishRecord, toRecordContent } from './cloudflare.ts';
+import { requireCompleteSetup, requireToken } from './preflight.ts';
 import { renderSection } from './render.ts';
 import { hostFor, isSectionName, readSection, SECTION_NAMES } from './sections.ts';
 import type { SectionName } from './sections.ts';
+import { resolveZoneId, upsertEnv } from './setup.ts';
 import { buildRecord, DEFAULT_MAX_RECORD_BYTES } from './txt.ts';
 import type { TxtRecord } from './txt.ts';
+import { compareRecords, resolveLive, RESOLVER_ADDRESS } from './verify.ts';
 
 interface Config {
   readonly domain: string;
@@ -21,6 +24,11 @@ interface BuiltSection {
 }
 
 const DIST = new URL('../dist/', import.meta.url);
+const ENV_FILE = '.env';
+
+/** Cloudflare answers authoritatively within seconds, but a cached NXDOMAIN can outlive the publish. */
+const VERIFY_ATTEMPTS = 6;
+const VERIFY_WAIT_MS = 5000;
 
 try {
   await run();
@@ -54,8 +62,17 @@ async function run(): Promise<void> {
       });
     case 'publish':
       return values['dry-run'] ? printPublishPlan(config) : publish(config);
+    case 'setup':
+      return setup(config);
+    case 'verify':
+      return verify(config, { attempts: 1 });
+    case 'ship':
+      return ship(config);
     default:
-      throw new Error(`Unknown command "${command}". Use build, validate, preview or publish.`);
+      throw new Error(
+        `Unknown command "${command}". ` +
+          'Use build, validate, preview, publish, setup, verify or ship.',
+      );
   }
 }
 
@@ -130,25 +147,59 @@ function printPublishPlan(config: Config): void {
 }
 
 async function publish(config: Config): Promise<void> {
-  const built = buildAll(config);
-  const options = {
-    token: requireEnv('CLOUDFLARE_API_TOKEN'),
-    zoneId: requireEnv('CLOUDFLARE_ZONE_ID'),
-    ttl: config.ttl,
-  };
+  // Checked before anything is built or sent, so an incomplete setup costs no request.
+  const { token, zoneId } = requireCompleteSetup(process.env);
+  const options = { token, zoneId, ttl: config.ttl };
 
-  for (const { host, record } of built) {
+  for (const { host, record } of buildAll(config)) {
     const outcome = await publishRecord(options, host, record);
     console.log(`${outcome} ${host} (${record.bytes} bytes)`);
   }
 }
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value === '') {
-    throw new Error(`Missing ${name}. Copy .env.example to .env and fill it in.`);
+/** Resolves the zone id from the token and writes it to `.env`, so it is never copied by hand. */
+async function setup(config: Config): Promise<void> {
+  if ((process.env.CLOUDFLARE_ZONE_ID ?? '') !== '') {
+    console.log('CLOUDFLARE_ZONE_ID is already set; nothing to do.');
+    return;
   }
-  return value;
+
+  const zoneId = await resolveZoneId(requireToken(process.env), config.domain);
+  writeFileSync(ENV_FILE, upsertEnv(readFileSync(ENV_FILE, 'utf8'), 'CLOUDFLARE_ZONE_ID', zoneId));
+  process.env.CLOUDFLARE_ZONE_ID = zoneId;
+
+  console.log(`Wrote CLOUDFLARE_ZONE_ID for ${config.domain} to ${ENV_FILE}.`);
+}
+
+/** Reads the records back from a public resolver and fails when they are not what was built. */
+async function verify(config: Config, options: { attempts: number }): Promise<void> {
+  const built = buildAll(config).map(({ host, record }) => ({ host, strings: record.strings }));
+  const hosts = built.map(({ host }) => host);
+
+  for (let attempt = 1; ; attempt++) {
+    const drift = compareRecords(built, await resolveLive(hosts));
+
+    if (drift.length === 0) {
+      console.log(`All ${hosts.length} records match on ${RESOLVER_ADDRESS}.`);
+      return;
+    }
+
+    if (attempt >= options.attempts) {
+      const detail = drift.map(({ host, reason }) => `  - ${host}: ${reason}`).join('\n');
+      throw new Error(`Not live on ${RESOLVER_ADDRESS} after ${attempt} attempt(s):\n${detail}`);
+    }
+
+    console.log(`Waiting for DNS (${drift.length} record(s) pending, attempt ${attempt})...`);
+    await new Promise((resume) => setTimeout(resume, VERIFY_WAIT_MS));
+  }
+}
+
+/** The whole flow: resolve the zone id if needed, check the content, publish, then prove it is live. */
+async function ship(config: Config): Promise<void> {
+  await setup(config);
+  validate(config);
+  await publish(config);
+  await verify(config, { attempts: VERIFY_ATTEMPTS });
 }
 
 function printRecordSummary(host: string, record: TxtRecord, config: Config): void {
