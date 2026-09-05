@@ -49,7 +49,7 @@ Run the same command again, swapping the name for one of these:
 Source and a reader script: github.com/osmarpetry/dns-cv
 Web version: {{domain}}`;
 
-const AVAILABILITY = `Work status: Luxembourgish citizen, EU work authorization
+const AVAILABILITY = `Work status: Luxembourgish and Brazilian citizen, EU work authorization
 
 Open to: senior software and product engineering roles in the EU,
 hybrid in Luxembourg or remote.
