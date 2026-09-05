@@ -10,9 +10,11 @@ It prints the CV in colour and tells you which command to run next. No `eval`,
 no pipe into a shell, nothing to install — the DNS answer is data for `printf`,
 never a command.
 
-Markdown in `content/` is compiled into DNS-safe TXT records, validated, and
-published to Cloudflare. Colour is decided at build time and travels as text, so
-no escape byte ever arrives from the network.
+The CV at <https://osmarpetry.dev/resume.md> is compiled into DNS-safe TXT
+records, validated, and published to Cloudflare. It is the same markdown that
+renders `/resume/` and that the PDF is made from, so the CV is edited in one
+place. Colour is decided at build time and travels as text, so no escape byte
+ever arrives from the network.
 
 ## Requirements
 
@@ -53,8 +55,35 @@ projects.cv.osmarpetry.dev     selected work
 contact.cv.osmarpetry.dev      links and availability
 ```
 
-`content/*.md` uses `{{domain}}` wherever the zone appears, so the same content
-builds for any domain.
+`home`, `experience` and `contact` are derived from the CV. `projects` is
+written here, in `content/projects.md`, because selected work is not part of a
+CV. Both use `{{domain}}` wherever the zone appears, so the same content builds
+for any domain.
+
+## Where the short prose comes from
+
+A record holds 2048 bytes; the CV's `## Experience` section alone is 9502, so
+the terminal text cannot be derived from the long bullets. It lives in the CV as
+an HTML comment per role, which every markdown renderer drops — invisible on the
+site and in the PDF, read only by `src/resume.ts`:
+
+```markdown
+### Cyberr
+#### Senior Software Engineer
+Luxembourg · Oct 2025 - Jun 2026
+
+<!-- dns: Scheduling and meeting flows for a hiring platform. -->
+```
+
+Opting in is per role, which is how thirteen roles fit a budget that holds
+seven. `<!-- dns-earlier: ... -->` closes the section with one line covering the
+roles left out.
+
+Set `DNS_CV_RESUME` to a path to build from an unpublished edit:
+
+```bash
+DNS_CV_RESUME=../portifolio-ssg2/content/resume.md npm run validate
+```
 
 ## The encoding, and why
 
@@ -63,8 +92,8 @@ A TXT record is a list of character-strings, each capped at 255 bytes
 the strings as one concatenated value. `src/txt.ts` chunks on character
 boundaries so a multi-byte character is never cut in half.
 
-Content in `content/*.md` is validated at build time as plain ASCII with no
-quotes, no backslashes and no control bytes. Only then does the build add two
+Content is folded to ASCII (`·` to `-`, accents dropped) and then validated at
+build time as plain ASCII with no quotes, no backslashes and no control bytes. Only then does the build add two
 kinds of marker, as ordinary text:
 
 | In the record | Means |
